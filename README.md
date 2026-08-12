@@ -27,13 +27,13 @@ proven in the sibling `tinyjoypad_vircon32` project.
 | Console input | Used for |
 |---|---|
 | D-pad | Move / navigate the menu |
-| Button 1 ("A") | Confirm / Gamebuino's own Button A |
-| Button 2 ("B") | Gamebuino's own Button B |
-| Button 3 ("X") | Gamebuino's own Button C |
-| Button 5 ("L") | Toggle a pixel-grid overlay on/off - only while a game is actually running (no effect on the menu) |
-| Button 6 ("R") | Toggle real solid-gray rendering on/off - GB_GRAY normally renders as real hardware's own flickering checkerboard dither; this shows it as a real, solid, flat gray instead. Works globally (menu, mid-game, dialog) like the mute toggle below, though it's only visible in games that actually draw GB_GRAY content |
-| Button 4 ("Y") | Toggle sound on/off globally - works on the menu, mid-game, and during the quit-confirmation dialog |
-| Start | Pause mid-game and open the quit-confirmation dialog (YES/NO, defaults to NO) |
+| Button A | Confirm / Gamebuino's own Button A |
+| Button B | Gamebuino's own Button B |
+| Button X | Gamebuino's own Button C |
+| Button Y | Toggle sound on/off globally - works on the menu, mid-game, and during the quit-confirmation dialog |
+| Button L | Toggle a pixel-grid overlay on/off - only while a game is actually running (no effect on the menu) |
+| Button R | Toggle real solid-gray rendering on/off - GB_GRAY normally renders as real hardware's own flickering checkerboard dither; this shows it as a real, solid, flat gray instead. Works globally (menu, mid-game, dialog) like the mute toggle above, though it's only visible in games that actually draw GB_GRAY content |
+| Button Start | Pause mid-game and open the quit-confirmation dialog (YES/NO, defaults to NO) |
 
 Which physical keyboard key or real gamepad button maps to which of these
 is up to the Vircon32 emulator's own input configuration - this cartridge
