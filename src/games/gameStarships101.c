@@ -1161,9 +1161,7 @@ void shipsUpdatePerso()
     {
         // real upstream's own auto-pilot, taking over the controls once
         // the level is cleared, steering the ship toward its own fly-off
-        // ramp position (real upstream also stops the [unported]
-        // background music tracks here at wait_end==10 - see this file's
-        // own "SOUND" header comment)
+        // ramp position
         btRight = false;
         btLeft = false;
         btUp = false;
@@ -1173,6 +1171,11 @@ void shipsUpdatePerso()
         if( shipsPerso.x > 11 ) btLeft = true;
         if( shipsPerso.x < 8 ) btRight = true;
         if( shipsPerso.x >= 8 && shipsPerso.x <= 11 ) shipsPerso.x = 10;
+        if( shipsPerso.waitEnd == 10 ) // real upstream's own one-time stop, the instant the auto-pilot phase begins
+        {
+            gbStopTrack( 1 );
+            gbStopTrack( 2 );
+        }
     }
 
     if( !shipsPerso.destroy )
@@ -1322,7 +1325,8 @@ void shipsUpdatePerso()
                 shipsPerso.waitGameover = 0;
             }
             shipsPerso.vies = 0;
-            // real upstream also stops the (unported) background music tracks here - see this file's own "SOUND" header comment
+            gbStopTrack( 1 ); // real upstream's own stop, the instant the player's last life is lost
+            gbStopTrack( 2 );
         }
     }
 
@@ -1424,7 +1428,8 @@ void shipsUpdateAff()
 // -----------------------------------------------------------------------
 // Reset / new game - direct port of real upstream's own initGame() minus
 // the blocking title-screen call (see this file's own "STATE-MACHINE
-// CONVERSION" header comment) and minus the dropped music (see "SOUND").
+// CONVERSION" header comment) - the real background music start is fully
+// restored here too (see "SOUND"), not dropped.
 // -----------------------------------------------------------------------
 
 void shipsResetGame()
