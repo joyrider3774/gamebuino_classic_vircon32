@@ -12,6 +12,6 @@
         <texture path="obj/thumbnails4.vtex"/>
     </textures>
     <sounds>
-        <sound path="obj/wt_saw.vsnd"/>
+        <sound path="obj/wt_square.vsnd"/>
     </sounds>
 </rom-definition>

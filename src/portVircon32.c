@@ -40,6 +40,13 @@
 #define ORIGIN_Y     12
 
 #define COLUMNS_TEXTURE_ID 0
+// libs/PlayNote/sounds/wt_square.wav - a real, hard-edged 50%-duty square
+// wave (tools/gen_square_wavetable.py), matching real Gamebuino Classic
+// hardware's own default instrument exactly: real Sound.cpp drives its
+// piezo speaker with a genuine 2-level PWM square wave (toggling
+// _chanState high/low every half-period in updateOutput()/generateOutput() -
+// no duty-cycle control of its own, amplitude is the only thing a real
+// instrument step varies), not PlayNote's own generic sawtooth sample.
 #define WAVETABLE_SOUND_ID 0
 // See the sibling tinyjoypad_vircon32 project's own portVircon32.c for the
 // full story on why this needs to be short enough to keep the SPU's own
@@ -437,6 +444,43 @@ void md_updateAudio()
     }
 
     playnote_update();
+}
+
+// See machineDependent.h's own doc comment for the full rationale (a
+// continuously-retunable voice, for gamebuinoShim.c's own tracker/pattern
+// engine, distinct from the fixed-duration one-shot pool above).
+int md_trackerVoiceStart( float freqHz, float volume )
+{
+    if( freqHz <= 0.0 )
+      return -1;
+    return playnote_start( freqHz, volume );
+}
+
+void md_trackerVoiceRetune( int channel, float freqHz, float volume )
+{
+    if( channel < 0 || freqHz <= 0.0 )
+      return;
+
+    // Duplicates playnote_start()'s own freq->speed formula - playnote.h
+    // has no public "retune an already-playing voice" entry point of its
+    // own, only a fresh play_sound()-driven start - same formula, same
+    // WAVETABLE_PERIOD_SAMPLES constant, just applied to a channel that's
+    // already sounding instead of starting a new one. Bypasses PlayNote's
+    // own per-frame fade bookkeeping entirely (harmless: this project's
+    // real PLAYNOTE_FADE_IN_FRAMES/PLAYNOTE_FADE_OUT_FRAMES are both 0, so
+    // playnote_update() already skips every voice every frame - see
+    // playnote.h's own fadeFramesLeft<=0 check).
+    float speed = freqHz * WAVETABLE_PERIOD_SAMPLES / 44100.0;
+    select_channel( channel );
+    set_channel_speed( speed );
+    set_channel_volume( volume );
+}
+
+void md_trackerVoiceStop( int channel )
+{
+    if( channel < 0 )
+      return;
+    playnote_stop( channel );
 }
 
 // -----------------------------------------------------------------------------

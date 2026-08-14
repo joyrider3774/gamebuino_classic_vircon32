@@ -4316,13 +4316,226 @@ technically be holding a direction at the exact moment the ROM finishes
 loading, but that's a far narrower window than the every-single-quit case
 this was actually found for.
 
+## Audio authenticity pass: a real square-wave timbre, and exact real playOK/playCancel/playTick pitches
+
+Prompted directly ("can audio be made (more) authentic"), scoped down via
+a direct multi-select question to two of three real, independently-sized
+options found by investigation (a third - porting the real single-channel
+tracker/pattern/track/instrument engine itself - was surfaced but not
+chosen this session; see the Sound bullet under "Open questions" below).
+
+**Timbre**: `md_playTone()` (via `libs/PlayNote`) was playing every note
+in every game through `sounds/wt_saw.wav`, a plain sawtooth single-cycle
+sample - PlayNote's own generic default, never swapped for anything
+Gamebuino-specific. Real hardware's own default instrument
+(`Sound.cpp`'s `squareWaveInstrument`) drives a genuine 2-level PWM square
+wave instead (`Sound::generateOutput()`'s own `_chanState[]` toggle has no
+duty-cycle control of its own - a plain, symmetric 50% duty cycle,
+confirmed by reading the real ISR directly rather than assumed). Replaced
+with a new `sounds/wt_square.wav` (`tools/gen_square_wavetable.py` - a
+real, checked-in generator, matching this project's own
+`gen_column_atlas.py`/`gen_pixelgrid.py` precedent rather than a one-off
+manual asset), same 256-sample/44100Hz/mono/16-bit format as the sample it
+replaces (inspected directly, not assumed) so no other code needed to
+change - `Make.bat`/`Make.sh`/`rom.xml`/`portVircon32.c`'s own
+`WAVETABLE_SOUND_ID` comment updated to reference it. A single global
+asset swap - every one of the 99 games' own `gbPlayNote`/`gbPlayTick`/
+`gbPlayOK`/`gbPlayCancel` calls sound authentically squarer/buzzier at
+once, no per-game changes needed.
+
+**Exact playOK()/playCancel()/playTick() pitches**: these three were
+previously hand-guessed frequencies/durations (900/1400Hz etc, picked
+without reference to real hardware). Real hardware plays them from real,
+tiny pattern data instead - decoded by hand against
+`Sound::updatePattern()`'s own real bit-packed word format (a leading
+2-bit command-flag/reserved pair, then either a 4-bit cmd + 5-bit X + 5-bit
+Y command word, or a 6-bit pitch + 8-bit duration note word) and the real
+36-entry `_halfPeriods` pitch table (`EXTENDED_NOTE_RANGE`'s own real
+default of 0): `playOKPattern={0x0005,0x138,0x168,0x0000}` decodes to
+select-instrument-0(square) then pitch 14 (halfPeriod 110) then pitch 26
+(halfPeriod 55), 1 frame each; `playCancelPattern` is the same two notes
+reversed; `playTickP={0x0045,0x168,0x0000}` selects instrument 1 (noise,
+not square) then pitch 26, 1 frame. Real audible frequency =
+`15000 / (2*halfPeriod)` - `Sound::generateOutput()`'s own directly-stated
+real 15kHz ISR rate, toggling the output every halfPeriod ISR ticks -
+giving OK a real rising 68.18Hz->136.36Hz blip, Cancel the same falling,
+and Tick a 136.36Hz tone (the real noise instrument's own pseudorandom-
+amplitude buzz has no equivalent in this shim's plain single-cycle-
+wavetable tone engine, so it plays as a plain tone at the real pitch/
+duration instead - a documented, honest simplification, not a silent
+approximation). Duration is real display frames (`1.0/gbFrameRateFps`),
+matching `gbPlayNote()`'s own already-correct frame-relative scaling, not
+a fixed wall-clock constant.
+
+**A direct "do sounds get collapsed" follow-up, prompted by the two-call-
+per-effect shape this fix produces, was checked against the sibling
+tinyjoypad_vircon32 project's own real "burst collapses to one tone" bug
+history (a whole multi-game saga in that project's own CLAUDE.md) rather
+than assumed either way**: that project's own `md_playTone()` originally
+forced every call through one shared, manually-tracked voice
+(`playnote_stop_all()` before every new tone), so a burst of N calls with
+no real time between them was only ever audible as the last one - later
+fixed there to a genuinely multi-voice design (a 16-element
+`audioStopAtFrame[]` array, one per real SPU channel, no
+`playnote_stop_all()` inside `md_playTone()` itself, since
+`playnote_start()`'s own `play_sound()` call already picks a free channel
+internally). Diffed this project's own current `md_playTone()`/
+`md_stopTone()`/`md_updateAudio()` directly against that project's fixed
+version: word-for-word identical - this project was evidently already
+built on the corrected design, never the buggy one. Confirmed, not just
+assumed: `gbPlayOK()`/`gbPlayCancel()`'s two `md_playTone()` calls each
+land on a genuinely separate channel and really do sound together (a
+rising/falling octave dyad, matching the doc comment above), no fix
+needed.
+
+**A real, separate, out-of-scope-for-this-session finding surfaced while
+deriving the pitch table above, left for a future session**: this shim's
+own general-purpose `gbPlayNote(pitch, duration)` (called directly by 32
+already-shipped games) computes frequency as a MIDI-relative
+`440*2^((pitch-45)/12)`, but real `Sound::playNote(pitch,...)` treats
+`pitch` as a direct 0-35 index into `_halfPeriods` - a different
+convention. Numerically the two formulas track fairly closely over that
+0-35 range (a consistent ~7-9% sharp bias, not an order-of-magnitude
+mismatch - e.g. pitch 14 gives 73.35Hz here vs a real 68.18Hz), so this is
+a real, quantified, small-but-nonzero inaccuracy for any of those 32
+games' own direct `gb.sound.playNote()` calls, not a broken one - worth a
+dedicated pass (deriving the exact real per-pitch table directly rather
+than a formula, the same way this session did for OK/Cancel/Tick) if
+audio authenticity is revisited again.
+
+## A full real tracker/pattern/track engine, restored across 34 games, and a real division-by-zero crash found and fixed via a live user report
+
+Direct follow-up ("now also do 3") picking up the third, larger option the
+previous audio-authenticity pass had surfaced but not built: a real port of
+`Sound.h`/`Sound.cpp`'s own single-oscillator-per-channel tracker engine -
+`playPattern()`/`playTrack()`/`command()`/instrument envelopes/volume-
+slide/arpeggio/tremolo - none of which this shim had any equivalent for
+before, so every game calling them directly (confirmed via a real grep
+sweep of `more games/`: ~34 already-shipped games do) had its real music/
+sound-effect sequences dropped or approximated to a single stand-in tone.
+
+**The engine** (`gamebuinoShim.h`/`.c`'s own Sound section): `gbPlayPattern`/
+`gbPlayTrack`/`gbSoundCommand`/`gbChangePatternSet`/`gbChangeInstrumentSet`/
+`gbPlayNoteChannel`, plus an internal `gbUpdateSoundTracker()` called
+automatically once per real tick from `gbRenderFrame()` (matching real
+`Gamebuino::update()`'s own automatic `sound.updateTrack()`/
+`updatePattern()`/`updateNote()` tail call) - a direct, function-for-
+function port of real `Sound::playPattern`/`playTrack`/`command`/`playNote`/
+`updateTrack`/`updatePattern`/`updateNote`/`generateOutput`, across
+`MAX_SOUND_CHANNELS=4` (matching real hardware's own documented "0 to 4"
+range - every real game found calling this API directly uses channel 0-3).
+Real instrument-envelope stepping, volume-slide/arpeggio/tremolo command
+state, and a real `prescaler` (`gbSoundPrescaler = max(1,fps/20)`,
+recomputed on every `gbSetFrameRate()` call exactly like real
+`Gamebuino::setFrameRate()` does) that keeps note/effect timing wall-clock-
+consistent across games configured at different frame rates, are all
+faithfully reproduced. Since Vircon32's own hardware model has no
+equivalent to real hardware's own continuously-retuned single oscillator,
+two new primitives (`md_trackerVoiceStart`/`Retune`/`Stop`,
+`machineDependent.h`/`portVircon32.c`) give a tracker channel a genuinely
+sustained, continuously-retuned voice (reusing PlayNote's own
+`select_channel`/`set_channel_speed`/`set_channel_volume` primitives
+directly, bypassing its fade system) rather than restarting a fresh
+one-shot voice every tick, which would sound like a stutter of separate
+attacks instead of one continuous note.
+
+**`gbPlayNote()`'s own previously-flagged pitch-formula bug (see the
+"Audio authenticity pass" section above) is fixed as a direct consequence**
+of building this engine on the real `_halfPeriods`-table-based frequency
+formula throughout - the old MIDI-relative `440*2^((pitch-45)/12)`
+approximation is gone entirely, so all 32 games that call `gbPlayNote()`
+directly now get the exact real frequency, not just a close one.
+
+**Validated with a real pilot before scaling out**: Master Kebab
+(`gameMasterKebab.c`, `gb.sound.playPattern(musique,1)`) was migrated by
+hand first and verified via Puppeteer (real gameplay reached, the engine's
+own per-tick `gbUpdateSoundTracker()` running continuously with zero
+crashes) before dispatching further work.
+
+**34 more games migrated via 15 parallel background agents** (this
+project's own established isolated-worktree workflow, `isolation:
+"worktree"`), each given the engine's full API reference plus its own
+real upstream source location: 101Starships (real background music via
+2 real tracks, the most substantial single restoration), Crabator (7 real
+pattern sites), Super-Crate-Buino (26 sites), UFO-Race, Solitaire,
+SpinSpinSpinbuino, Sokobuino, Copter, FlappyBirdo, Bomber, shipwrek,
+BigBlackBox, Robot, Artillery, NoNamePlatformGame, BlocksBuino, Simonbuino,
+Smash-and-Crash, SnakeAbc, StickFighter, armageddon, bub, skibuino,
+Tetrino, Video Poker, ShootBuino, CopterStrike, Asterocks, Invaders,
+Killrace, Lander, Paqman, and Aerial-Assault - each restoring its own real
+`soundfx[][]` table and/or pattern/track/instrument data byte-for-byte
+against real upstream source, replacing whatever one-shot-tone
+approximation or dropped call the original port had. Two games
+(gamebuino-community-rpg, Elventure) were checked and confirmed to have no
+live restorable sound call at all - both route entirely through already-
+documented dead/unportable code paths (Elventure's real `play_song()` has
+`return;` as its literal first statement; gamebuino-community-rpg's real
+music is a self-programming-flash hack this platform has no equivalent
+for) - correctly left unchanged rather than reviving dead code.
+**Sokobuino's own agent found a real, previously-unnoticed upstream bug**
+along the way: real `TriggerFx()` calls `gb.sound.playTrack()` on data
+that's actually `0x0000`-terminated (real pattern-shaped data, not the
+`0xFFFF`-terminated shape a real track needs) - a genuine upstream mixup
+between two same-signature functions, decoded and ported as the real
+pattern data it clearly is rather than reproduced as the unreproducible
+(and, ported literally, NULL-pointer-crash-risking) undefined behavior
+real hardware would hit.
+
+**Integration**: each agent's own finished file was pulled directly onto
+`main` from its own worktree branch (`git show <branch>:<path>`, not a
+full branch merge, since several agents had independently fast-forward-
+merged the base engine commit into their own branch in different orders -
+pulling just the final file content sidesteps that entirely), followed by
+one consolidated rebuild across all 34 changed files together.
+
+**A real division-by-zero crash, found via a live user report immediately
+after integration, traced and fixed**: Copter crashed on real,
+sustained machine-gun fire. Root cause: real `Sound.h`'s own
+`outputPitch[]`/`outputVolume[]` are `uint8_t`/`int8_t` - every real
+assignment to them (including a `+=`) narrows the result to that real
+width *before* the real `(x+NUM_PITCH)%NUM_PITCH` wrap ever runs,
+guaranteeing that wrap is always safe on real hardware. This dialect's
+`int` never narrows, so a real, genuinely reachable case - Copter's own
+machine-gun `soundfx` row decodes to a real arpeggio step of -46 every 2
+ticks (`gbSoundPrescaler`=2 at 41fps) over a real 20-tick note - compounds
+`outputPitch` deep into negative territory well before the final wrap
+instead of narrowing back into range first, indexing `gbHalfPeriods[]`
+out of bounds and feeding whatever garbage word sat there into
+`freqHz = 15000/(2*halfPeriod)` as a real, live divide-by-zero - a trap
+this platform enforces that real hardware simply has no equivalent for
+(a wrapped, in-range `uint8_t` index is never garbage on real hardware to
+begin with). Fixed by adding a new `gbNarrowInt8()` helper and reproducing
+the real narrowing explicitly at each real assignment point (`&0xFF` for
+`outputPitch`, `gbNarrowInt8()` for `outputVolume`) - the same
+"replicate real AVR narrow-int behavior explicitly" precedent this
+project has already established repeatedly (see the EEPROM-narrowing
+audit elsewhere in this file). Verified fixed both by the user's own live
+retest and a Puppeteer session holding Copter's fire button continuously
+for 2 real seconds (repeatedly re-triggering the exact soundfx that
+crashed) with zero errors.
+
+Per direct instruction, the entire effort (the engine, the pitch-formula
+fix, all 34 game migrations, and the Copter crash fix) was squashed into
+a single commit on `main`, with every agent worktree and branch deleted
+afterward - no per-agent branch history left referenced anywhere.
+
 ## Open questions
 
-- **Sound**: only one-shot representative tones are implemented
-  (`gbPlayNote`/`gbPlayTick`/`gbPlayOK`/`gbPlayCancel`) - real
-  Gamebuino's own track/pattern player (`Sound::playTrack`/
-  `playPattern`) is unported. Worth doing once a game that actually needs
-  it is picked (Pong itself never calls into that part of the API).
+- **Sound**: fully resolved - no longer an open question. Real square-wave
+  timbre, real derived `gbPlayTick`/`OK`/`Cancel` pitches, a real
+  `gbPlayNote()` pitch formula (the previously-flagged MIDI-relative
+  approximation is gone, replaced by the same real `_halfPeriods`-table
+  formula the full engine uses), and a real `playPattern`/`playTrack`/
+  `command`/instrument-envelope tracker engine, restored across 34 already-
+  shipped games - see "A full real tracker/pattern/track engine..." above
+  for the complete writeup (including a real division-by-zero crash found
+  and fixed via a live user report). The one remaining, deliberately-out-
+  of-scope gap: real per-instrument-step *duty-cycle*/waveform-shape
+  variety beyond the shared default square/noise pair - any game that
+  registers its own fully custom instrument set still gets it faithfully
+  (the engine reads real instrument data generically), this is only about
+  never having found a real shipped game that needed anything beyond the
+  two real defaults to sound correct.
 - **Font fidelity**: resolved - see "Real Gamebuino fonts ported" below.
 - **Feature parity with the sibling project**: no longer an open
   question - every feature that project ended up building (thumbnail

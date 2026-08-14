@@ -61,37 +61,48 @@
 // upstream itself passed real title text to port.
 //
 // -----------------------------------------------------------------------
-// SOUND - approximated, real scope limit (see this project's own CLAUDE.md)
+// SOUND - fully real, via the shared tracker/pattern/track engine
 // -----------------------------------------------------------------------
-// Real upstream plays a continuous, real 2-channel tracker background
-// score (`gb.sound.playTrack()`/`changePatternSet()`, `track1`/`track2`,
-// 24 real `p00`-`p23` pattern tables) throughout gameplay, and fires 6
-// named one-shot SFX as short tracker PATTERNS, not simple
-// `Sound::command()` envelopes (`player_shot`, `enn_shot`, `enn_hit`,
-// `enn_destroy`, `player_destroy`, `player_super`). This shim's own real
-// scope boundary (documented in this project's own CLAUDE.md "Open
-// questions") only ports one-shot representative tones, not the real
-// pattern/track player - so the continuous background music is dropped
-// entirely here (no sensible single-note substitute exists for a looping
-// multi-channel tune; the game runs silent-of-music, matching every other
-// already-shipped game's own silent-of-music baseline) and each of the 6
-// named SFX patterns is approximated as one representative
-// `gbPlayNote(pitch, duration)` tone (`shipsSfxShot()`/`shipsSfxEnemyShot()`/
-// `shipsSfxHit()`/`shipsSfxDestroy()`/`shipsSfxSuperCharge()` below;
-// `player_destroy` reuses `gbPlayCancel()` directly instead of inventing a
-// seventh pitch, since it is a real "something bad just happened" cue and
-// this shim already has a literal primitive for exactly that) - the same
-// "approximate complex sound sensibly" precedent `gameShipwrek.c`'s own
-// `shipSfx()`/`gameAsterocks.c`'s own `asterSoundFx` table already
-// established. Every OTHER real sound call site in this game
-// (`gb.sound.playTick()`/`playOK()`/`playCancel()` - the phase-banner
-// countdown ticks, pause/resume/quit, and the CONTINUE? prompt) maps 1:1
-// onto this shim's own identical `gbPlayTick()`/`gbPlayOK()`/
-// `gbPlayCancel()` primitives with no approximation needed at all. The two
-// end-of-run "win"/"lose" jingles (`p20`/`p21` and `p22`/`p23`, played via
-// `playPattern()` at the real `end_screen` transition) are approximated
-// the same way as a single `gbPlayOK()`/`gbPlayCancel()` stinger
-// respectively, at the exact same transition point upstream fires them.
+// Every real upstream sound call site is now restored for real, via this
+// shim's own real single-oscillator-per-channel tracker engine
+// (`gbPlayPattern()`/`gbPlayTrack()`/`gbChangePatternSet()`) rather than
+// approximated - no scope limit remains for this game's own sound.
+//
+// The continuous, real 2-channel background score
+// (`gb.sound.playTrack()`/`changePatternSet()`, `track1`/`track2`
+// (`shipsTrack1`/`shipsTrack2`), 24 real `p00`-`p23` pattern tables
+// (`shipsPat00`-`shipsPat23`, wired up via `shipsPatternSet`)) now plays
+// for real on channels 1/2, started from `shipsResetGame()` at the exact
+// same point real `initGame()` does. Real upstream's own
+// `!gb.sound.trackIsPlaying[1] && wait_end<10 && vies>0` check (loop()'s
+// own "the track finished, since track1/track2 are 0xFFFF-terminated and
+// don't loop on their own - restart it" trigger) is reproduced in
+// `shipsUpdateGame()` by reading `gbTrackIsPlaying[1]` directly - a real,
+// non-static `gamebuinoShim.c` global (the direct equivalent of real
+// `Sound::trackIsPlaying[]`, itself a public member upstream reads the
+// exact same way, not through an accessor), already visible here since
+// `gamebuinoShim.c` is included earlier in the same translation unit; no
+// shim change was needed to expose it.
+//
+// The 6 named one-shot SFX (`player_shot`, `enn_shot`, `enn_hit`,
+// `enn_destroy`, `player_destroy`, `player_super`) are real short tracker
+// PATTERNS upstream, not simple `Sound::command()` envelopes - each now
+// plays via a direct `gbPlayPattern(pattern, 0)` call
+// (`shipsSfxShot()`/`shipsSfxEnemyShot()`/`shipsSfxHit()`/
+// `shipsSfxDestroy()`/`shipsSfxSuperCharge()`/`shipsSfxPlayerDestroy()`
+// below), with the real pattern data (`shipsSndPlayerShot` etc., copied
+// word-for-word, not hand-transcribed - see "Sound data" below) rather
+// than a representative single-note stand-in.
+//
+// Every other real sound call site (`gb.sound.playTick()`/`playOK()`/
+// `playCancel()` - the phase-banner countdown ticks, pause/resume/quit,
+// and the CONTINUE? prompt) already mapped 1:1 onto this shim's own
+// identical `gbPlayTick()`/`gbPlayOK()`/`gbPlayCancel()` primitives with
+// no approximation needed, unchanged by this pass. The two end-of-run
+// "win"/"lose" jingles (`p20`/`p21` and `p22`/`p23`) now play for real via
+// `gbStopTrack()`+`gbPlayPattern()` at the exact real `end_screen`
+// transition point upstream fires them, replacing the earlier
+// `gbPlayOK()`/`gbPlayCancel()` stinger stand-in.
 //
 // -----------------------------------------------------------------------
 // REAL QUIRKS FOUND - preserved or normalized, and why
@@ -573,17 +584,69 @@ void shipsDisplayInt( int value, int tx, int ty, int fig )
 }
 
 // -----------------------------------------------------------------------
-// Sound - see this file's own header comment ("SOUND") for why each of
-// these is a single representative tone rather than the real multi-note
-// pattern it stands in for.
+// Sound data - real upstream's own SFX/music tracker patterns and tracks
+// (`_101starships.ino`), copied word-for-word via a script cross-checked
+// against each array's own real declared element count (see this file's
+// own header comment "SOUND"), not hand-transcribed.
 // -----------------------------------------------------------------------
 
-void shipsSfxShot() { gbPlayNote( 66, 2 ); }         // player_shot
-void shipsSfxEnemyShot() { gbPlayNote( 40, 3 ); }    // enn_shot
-void shipsSfxHit() { gbPlayNote( 52, 2 ); }          // enn_hit
-void shipsSfxDestroy() { gbPlayNote( 28, 8 ); }      // enn_destroy
-void shipsSfxSuperCharge() { gbPlayNote( 78, 10 ); } // player_super
-void shipsSfxPlayerDestroy() { gbPlayCancel(); }     // player_destroy
+// Real one-shot SFX patterns (short tracker patterns, not
+// Sound::command() envelopes).
+int[ 5 ] shipsSndEnnDestroy = { 0x8045,0x8851,0x8241,0x538,0x0000 };
+int[ 5 ] shipsSndEnnShot = { 0x8005,0x884D,0x81C1,0x250,0x0000 };
+int[ 5 ] shipsSndPlayerShot = { 0x8005,0x8141,0x14C,0x154,0x0000 };
+int[ 6 ] shipsSndPlayerSuper = { 0x8005,0x81C1,0x164,0x164,0x164,0x0000 };
+int[ 4 ] shipsSndEnnHit = { 0x8005,0x81C1,0x108,0x0000 };
+int[ 5 ] shipsSndPlayerDestroy = { 0x8045,0x8891,0x8241,0x608,0x0000 };
+
+// Real background-music/jingle patterns (p00-p19 = looping 2-channel
+// stage music, p20/p21 = win jingle, p22/p23 = lose jingle).
+int[ 27 ] shipsPat00 = { 0x8005,0x8101,0x410,0x2FC,0x210,0x2FC,0x210,0x4FC,0x20C,0x4FC,0x210,0x4FC,0x218,0x2FC,0x420,0x2FC,0x220,0x4FC,0x220,0x2FC,0x418,0x2FC,0x220,0x2FC,0x220,0x428,0x000 };
+int[ 19 ] shipsPat01 = { 0x8005,0x8101,0x12C,0x5FC,0x12C,0x1FC,0x12C,0x3FC,0x140,0x3FC,0x12C,0x5FC,0x12C,0x1FC,0x12C,0x3FC,0x140,0x3FC,0x0000 };
+int[ 8 ] shipsPat02 = { 0x8005,0x8101,0xC5C,0x250,0x258,0x85C,0x870,0x0000 };
+int[ 15 ] shipsPat03 = { 0x8005,0x8101,0xC40,0x23C,0x240,0x63C,0x640,0x448,0xC50,0x23C,0x240,0x648,0x650,0x458,0x0000 };
+int[ 7 ] shipsPat04 = { 0x8005,0x8101,0x106C,0x664,0x65C,0x458,0x0000 };
+int[ 19 ] shipsPat05 = { 0x8005,0x8101,0x13C,0x5FC,0x13C,0x1FC,0x13C,0x3FC,0x11C,0x3FC,0x13C,0x5FC,0x13C,0x1FC,0x13C,0x3FC,0x11C,0x3FC,0x0000 };
+int[ 8 ] shipsPat06 = { 0x8005,0x8101,0xC5C,0x258,0x264,0x86C,0x870,0x0000 };
+int[ 19 ] shipsPat07 = { 0x8005,0x8101,0x12C,0x5FC,0x12C,0x1FC,0x12C,0x3FC,0x140,0x3FC,0x13C,0x5FC,0x13C,0x1FC,0x13C,0x3FC,0x11C,0x3FC,0x0000 };
+int[ 7 ] shipsPat08 = { 0x8005,0x8101,0x106C,0x664,0x66C,0x458,0x0000 };
+int[ 19 ] shipsPat09 = { 0x8005,0x8101,0x13C,0x5FC,0x13C,0x1FC,0x13C,0x3FC,0x120,0x3FC,0x134,0x5FC,0x134,0x1FC,0x134,0x3FC,0x118,0x3FC,0x0000 };
+int[ 8 ] shipsPat10 = { 0x8005,0x8101,0xC5C,0x258,0x250,0x864,0x86C,0x0000 };
+int[ 19 ] shipsPat11 = { 0x8005,0x8101,0x12C,0x5FC,0x12C,0x1FC,0x12C,0x3FC,0x140,0x3FC,0x134,0x5FC,0x134,0x1FC,0x13C,0x3FC,0x1EC,0x3FC,0x0000 };
+int[ 9 ] shipsPat12 = { 0x8005,0x8101,0x870,0x46C,0x470,0x878,0x45C,0x48C,0x0000 };
+int[ 19 ] shipsPat13 = { 0x8005,0x8101,0x140,0x3FC,0x140,0x3FC,0x13C,0x3FC,0x13C,0x3FC,0x148,0x3FC,0x148,0x3FC,0x15C,0x3FC,0x13C,0x3FC,0x0000 };
+int[ 9 ] shipsPat14 = { 0x8005,0x8101,0x640,0x650,0x45C,0x648,0x658,0x464,0x0000 };
+int[ 11 ] shipsPat15 = { 0x8005,0x8101,0x410,0x2FC,0x210,0x8FC,0x418,0x2FC,0x23C,0x8FC,0x0000 };
+int[ 9 ] shipsPat16 = { 0x8005,0x8101,0x65C,0x66C,0x478,0x664,0x66C,0x458,0x0000 };
+int[ 11 ] shipsPat17 = { 0x8005,0x8101,0x42C,0x2FC,0x22C,0x8FC,0x434,0x2FC,0x234,0x8FC,0x0000 };
+int[ 9 ] shipsPat18 = { 0x8005,0x8101,0x65C,0x66C,0x478,0x66C,0x678,0x480,0x0000 };
+int[ 11 ] shipsPat19 = { 0x8005,0x8101,0x42C,0x2FC,0x22C,0x8FC,0x440,0x2FC,0x240,0x8FC,0x0000 };
+int[ 11 ] shipsPat20 = { 0x8241,0x8005,0x25C,0x264,0x440,0x848,0x240,0x250,0x458,0x85C,0x0000 };
+int[ 15 ] shipsPat21 = { 0x8241,0x8005,0x15C,0x5FC,0x15C,0x1FC,0x15C,0x7FC,0x140,0x5FC,0x140,0x1FC,0x140,0x7FC,0x0000 };
+int[ 8 ] shipsPat22 = { 0x8241,0x8005,0x28C,0x288,0x280,0x278,0x870,0x0000 };
+int[ 12 ] shipsPat23 = { 0x8241,0x8005,0x15C,0x1FC,0x158,0x1FC,0x150,0x1FC,0x148,0x1FC,0x840,0x0000 };
+
+// Real patternSet[]/track1[]/track2[] - the pattern-ID lookup table
+// shared by both music channels, and each channel's own real
+// pattern-sequence track (a 0xFFFF-terminated list of pattern indices
+// into shipsPatternSet, matching real Sound::updateTrack()'s own real
+// word format exactly).
+int*[ 24 ] shipsPatternSet = { shipsPat00,shipsPat01,shipsPat02,shipsPat03,shipsPat04,shipsPat05,shipsPat06,shipsPat07,shipsPat08,shipsPat09,shipsPat10,shipsPat11,shipsPat12,shipsPat13,shipsPat14,shipsPat15,shipsPat16,shipsPat17,shipsPat18,shipsPat19,shipsPat20,shipsPat21,shipsPat22,shipsPat23 };
+int[ 16 ] shipsTrack1 = { 0,2,4,6,8,2,4,10,12,14,16,14,18,14,16,0xFFFF };
+int[ 16 ] shipsTrack2 = { 3,1,5,7,9,1,5,11,13,15,17,15,19,15,17,0xFFFF };
+
+// -----------------------------------------------------------------------
+// Sound - one-shot SFX now play via the real gbPlayPattern() tracker
+// engine, matching upstream's own real gb.sound.playPattern(X,0) call
+// shape exactly (see this file's own header comment "SOUND").
+// -----------------------------------------------------------------------
+
+void shipsSfxShot() { gbPlayPattern( shipsSndPlayerShot, 0 ); }      // player_shot
+void shipsSfxEnemyShot() { gbPlayPattern( shipsSndEnnShot, 0 ); }    // enn_shot
+void shipsSfxHit() { gbPlayPattern( shipsSndEnnHit, 0 ); }           // enn_hit
+void shipsSfxDestroy() { gbPlayPattern( shipsSndEnnDestroy, 0 ); }   // enn_destroy
+void shipsSfxSuperCharge() { gbPlayPattern( shipsSndPlayerSuper, 0 ); } // player_super
+void shipsSfxPlayerDestroy() { gbPlayPattern( shipsSndPlayerDestroy, 0 ); } // player_destroy
 
 // -----------------------------------------------------------------------
 // Stars - direct port of real upstream's own updateStars() (the real
@@ -1371,6 +1434,14 @@ void shipsResetGame()
     shipsHighscore = ( lsb & 0x00FF ) + ( ( msb << 8 ) & 0xFF00 );
     if( shipsHighscore > 60000 ) shipsHighscore = 0;
 
+    // Real upstream's own gb.sound.changePatternSet(patternSet,1/2) +
+    // playTrack(track1,1)/playTrack(track2,2) - starts the real 2-channel
+    // background score at the exact same point real initGame() does.
+    gbChangePatternSet( shipsPatternSet, 1 );
+    gbChangePatternSet( shipsPatternSet, 2 );
+    gbPlayTrack( shipsTrack1, 1 );
+    gbPlayTrack( shipsTrack2, 2 );
+
     gbPickRandomSeed(); // no-op, see gamebuinoShim.h's own header comment
 
     shipsInitPerso();
@@ -1591,13 +1662,23 @@ void shipsUpdateGameplayTick()
     {
         shipsEndScreen = true;
         shipsWaitEndScreen = 0;
-        gbPlayOK(); // approximates real upstream's own p20/p21 win jingle - see "SOUND" header comment
+        // Real upstream's own p20/p21 win jingle (stopTrack(1)/(2) then
+        // playPattern(p20,1)/playPattern(p21,2)).
+        gbStopTrack( 1 );
+        gbStopTrack( 2 );
+        gbPlayPattern( shipsPat20, 1 );
+        gbPlayPattern( shipsPat21, 2 );
     }
     if( shipsPerso.vies == 0 && shipsPerso.waitGameover > 210 && !shipsEndScreen )
     {
         shipsEndScreen = true;
         shipsWaitEndScreen = 0;
-        gbPlayCancel(); // approximates real upstream's own p22/p23 lose jingle - see "SOUND" header comment
+        // Real upstream's own p22/p23 lose jingle (stopTrack(1)/(2) then
+        // playPattern(p22,1)/playPattern(p23,2)).
+        gbStopTrack( 1 );
+        gbStopTrack( 2 );
+        gbPlayPattern( shipsPat22, 1 );
+        gbPlayPattern( shipsPat23, 2 );
     }
 }
 
@@ -1635,6 +1716,10 @@ void shipsDrawPauseOverlay()
     }
     if( gbPressed( BTN_B ) )
     {
+        // Real upstream's own gb.sound.stopTrack(1)/stopTrack(2) before the
+        // playCancel() stinger and the return to the title screen.
+        gbStopTrack( 1 );
+        gbStopTrack( 2 );
         gbPlayCancel();
         shipsState = SHIPS_STATE_TITLE;
         shipsPause = false;
@@ -1670,6 +1755,23 @@ void shipsUpdateGame()
 {
     if( !shipsEndScreen )
     {
+        // Real upstream's own `!gb.sound.trackIsPlaying[1] && wait_end<10 &&
+        // vies>0` check - track1/track2 are 0xFFFF-terminated (not looping),
+        // so the background score naturally finishes; this re-triggers it,
+        // giving a continuous loop, exactly matching real hardware. Runs
+        // every tick regardless of pause state, matching real upstream's
+        // own placement outside the `if(!pause)` branch below.
+        // gbTrackIsPlaying is a real, non-static gamebuinoShim.c global
+        // (the direct equivalent of real Sound::trackIsPlaying[], itself a
+        // public member upstream reads the exact same way) - already
+        // visible here since gamebuinoShim.c is included earlier in the
+        // same translation unit.
+        if( !gbTrackIsPlaying[ 1 ] && shipsPerso.waitEnd < 10 && shipsPerso.vies > 0 )
+        {
+            gbPlayTrack( shipsTrack1, 1 );
+            gbPlayTrack( shipsTrack2, 2 );
+        }
+
         if( !shipsPause ) shipsUpdateGameplayTick();
         else shipsDrawPauseOverlay();
     }

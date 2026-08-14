@@ -75,15 +75,16 @@
 // gameplay itself) and considerably simpler than modeling a one-time
 // frame-rate switch inside the state machine.
 //
-// SOUND: upstream's own `playsoundfx()` drives real `gb.sound.command()`
-// calls to set volume/waveform/volume-slide/pitch-slide *before*
-// `gb.sound.playNote()` - this shim only implements one-shot tones
-// (`gbPlayNote`/`gbPlayTick`/`gbPlayOK`/`gbPlayCancel`), a documented,
-// already-established scope limit (see this project's own CLAUDE.md), not
-// something to flag fresh here. Approximated by calling `gbPlayNote()`
-// directly with the real table's own pitch/duration values only, dropping
-// the volume/waveform/slide shaping and the per-call `channel` parameter
-// (always 0 upstream anyway - this shim has no multi-channel concept).
+// SOUND: a direct, byte-for-byte port of upstream's own real
+// `playsoundfx(fxno,channel)` - `coptPlaySoundFx()` calls the shim's own
+// real tracker-engine primitives (`gbSoundCommand()` for volume/
+// instrument/slide/arpeggio, `gbPlayNoteChannel()` for the note itself),
+// matching upstream's own exact call order/argument shape one-for-one.
+// `coptSoundFx[3][8]` is upstream's own real `soundfx[3][8]` table verified
+// byte-for-byte. All 3 real call sites (Ennemies.ino's own building-
+// destroyed explosion, Player.ino's own machine-gun burst, Rescaper.ino's
+// own civilian-pickup chime) are restored with upstream's own exact
+// fxno/channel arguments (channel always 0, matching upstream).
 //
 // REAL UPSTREAM QUIRKS FOUND, AND WHAT WAS DONE ABOUT EACH:
 //
@@ -639,9 +640,8 @@ struct CoptRescape
 #define COPT_STATE_PLAY 1
 
 // -----------------------------------------------------------------------------
-// Sound - see this file's own header comment on why this is an
-// approximation (this shim only has one-shot tones, no volume/waveform/
-// slide shaping).
+// Sound - a direct port of upstream's own real playsoundfx(fxno,channel),
+// byte-for-byte against Copter.ino's own soundfx[3][8] table.
 // -----------------------------------------------------------------------------
 
 int[3][8] coptSoundFx =
@@ -651,9 +651,13 @@ int[3][8] coptSoundFx =
     { 0, 25, 1, 1, 7, 0, 7, 9 },      // Rescue pickup
 };
 
-void coptPlaySoundFx( int fxno )
+void coptPlaySoundFx( int fxno, int channel )
 {
-    gbPlayNote( coptSoundFx[ fxno ][ 1 ], coptSoundFx[ fxno ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, coptSoundFx[ fxno ][ 6 ], 0, channel );
+    gbSoundCommand( GB_CMD_INSTRUMENT, coptSoundFx[ fxno ][ 0 ], 0, channel );
+    gbSoundCommand( GB_CMD_SLIDE, coptSoundFx[ fxno ][ 5 ], -coptSoundFx[ fxno ][ 4 ], channel );
+    gbSoundCommand( GB_CMD_ARPEGGIO, coptSoundFx[ fxno ][ 3 ], coptSoundFx[ fxno ][ 2 ] - 58, channel );
+    gbPlayNoteChannel( coptSoundFx[ fxno ][ 1 ], coptSoundFx[ fxno ][ 7 ], channel );
 }
 
 
@@ -908,7 +912,7 @@ void coptUpdatePlayer()
 
         if( !coptPlayerIsEnrayer && gbRepeat( BTN_A, 1 ) )
         {
-            coptPlaySoundFx( 1 );
+            coptPlaySoundFx( 1, 0 );
             coptPlayerMitraille = true;
             coptPlayerTimeMitraille++;
             if( coptPlayerTimeMitraille > COPT_TIME_TO_ENRAYE )
@@ -1100,7 +1104,7 @@ void coptUpdateBatiment()
 
                 if( coptBat[ i ].life <= 0 )
                 {
-                    coptPlaySoundFx( 0 );
+                    coptPlaySoundFx( 0, 0 );
                     coptExState = 0;
                     coptExPosX = coptBat[ i ].posX;
                 }
@@ -1306,7 +1310,7 @@ void coptUpdateRescaper()
                     {
                         if( gbAbsInt( coptResc[ i ].x - (int)coptPlayerX ) < 5 )
                         {
-                            coptPlaySoundFx( 2 );
+                            coptPlaySoundFx( 2, 0 );
                             coptPlayerNbClient++;
                             coptResc[ i ].etat = 2;
                         }

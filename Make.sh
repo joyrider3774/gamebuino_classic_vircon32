@@ -49,7 +49,7 @@ png2vircon assets/thumbnails4.png -o obj/thumbnails4.vtex || abort_build
 echo
 echo Convert the PlayNote wavetable
 echo --------------------------
-wav2vircon "libs/PlayNote/sounds/wt_saw.wav" -o "obj/wt_saw.vsnd" || abort_build
+wav2vircon "libs/PlayNote/sounds/wt_square.wav" -o "obj/wt_square.vsnd" || abort_build
 
 echo
 echo Pack the ROM

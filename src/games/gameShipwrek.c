@@ -142,9 +142,9 @@
 //   here anyway since `println()` is a real, named upstream API this shim
 //   doesn't expose as a single call.
 //
-// Neither of the above rises to "large missing subsystem" (the tracker/
-// pattern sound engine and an on-screen keyboard are this project's own
-// already-documented, deliberate scope limits) - both are small.
+// Neither of the above rises to "large missing subsystem" (an on-screen
+// keyboard is this project's own already-documented, deliberate scope
+// limit) - both are small.
 //
 // -----------------------------------------------------------------------
 // OTHER REAL QUIRKS FOUND, PRESERVED (not "fixed") - fidelity to upstream
@@ -180,16 +180,15 @@
 //   TWICE (at two adjacent y offsets) before the waterline-mask fillRect
 //   papers back over both. A real, minor upstream double-draw quirk,
 //   preserved as-is rather than de-duplicated.
-// - `sfx()`'s own real per-effect envelope (`gb.sound.command(...)` calls
-//   for volume/waveform/volume-slide/pitch-slide, THEN a final
-//   `gb.sound.playNote(pitch, duration, channel)`) has no equivalent here
-//   - `gb.sound.command()` is exactly the low-level tracker/pattern
-//   primitive this project's own CLAUDE.md already documents as
-//   out-of-scope for this first sound pass. Approximated as a single
-//   `gbPlayNote(pitch, duration)` call using the real envelope table's own
-//   final pitch/duration values (`shipSoundFx[fxno][1]`/`[7]`) - the same
-//   "approximate complex sound sensibly" treatment this port's own
-//   instructions call for, not a new gap.
+// - `sfx()` is a direct, byte-for-byte port of upstream's own real
+//   `sfx(fxno,channel)` - `shipSfx()` calls the shim's own real
+//   tracker-engine primitives (`gbSoundCommand()` for volume/waveform/
+//   slide/arpeggio, `gbPlayNoteChannel()` for the note itself), matching
+//   upstream's own exact call order/argument shape one-for-one.
+//   `shipSoundFx[2][8]` is upstream's own real `soundfx[2][8]` table
+//   verified byte-for-byte. All 3 real call sites (sunk, hit, launch) are
+//   restored with upstream's own exact fxno/channel arguments (channel
+//   always 0, matching upstream).
 // - `draw_shots()`'s own inner-block `byte x, y; bool dir;` locals (used
 //   right inside a function whose OUTER loop already uses `x`/`y` as loop
 //   variables) were renamed to `bx`/`by`/`bdir` here defensively, purely
@@ -255,7 +254,7 @@ int[2][5][3] shipBoatPos;
 // shots map: 255 = not shot at, 254 = miss, 0-4 = hit boat number
 int[2][9][9] shipShots;
 
-// {waveform, pitch, pmd/pmt-ish, vmt, vmd, vol-slide, volume, length} - real upstream envelope table; only [1] (pitch) and [7] (length) are used here (see this file's own header comment on sfx()'s approximation)
+// {waveform, pitch, pmd/pmt-ish, vmt, vmd, vol-slide, volume, length} - real upstream soundfx[2][8] table, byte-for-byte.
 int[2][8] shipSoundFx =
 {
     {1,0,57,1,2,9,7,20}, // launch
@@ -636,13 +635,14 @@ void shipResetGame()
     }
 }
 
-// Approximates upstream's own sfx() (real Sound::command() volume/pitch
-// slide envelope - out of this shim's scope, see this file's own header
-// comment) with a single representative tone using the real envelope
-// table's own final pitch/length values.
-void shipSfx( int fxno )
+// A direct, byte-for-byte port of upstream's own real sfx(fxno,channel).
+void shipSfx( int fxno, int channel )
 {
-    gbPlayNote( shipSoundFx[ fxno ][ 1 ], shipSoundFx[ fxno ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, shipSoundFx[ fxno ][ 6 ], 0, channel );
+    gbSoundCommand( GB_CMD_INSTRUMENT, shipSoundFx[ fxno ][ 0 ], 0, channel );
+    gbSoundCommand( GB_CMD_SLIDE, shipSoundFx[ fxno ][ 5 ], -shipSoundFx[ fxno ][ 4 ], channel );
+    gbSoundCommand( GB_CMD_ARPEGGIO, shipSoundFx[ fxno ][ 3 ], shipSoundFx[ fxno ][ 2 ] - 58, channel );
+    gbPlayNoteChannel( shipSoundFx[ fxno ][ 1 ], shipSoundFx[ fxno ][ 7 ], channel );
 }
 
 // -----------------------------------------------------------------------
@@ -785,7 +785,7 @@ void shipSunkPopup( int b )
             else if( b == 2 ) gbPopup( "Destroyer sunk!", 15 );
             else if( b == 3 ) gbPopup( "Battleship sunk!", 15 );
             else if( b == 4 ) gbPopup( "Carrier sunk!", 15 );
-            shipSfx( 1 );
+            shipSfx( 1, 0 );
         }
     }
 }
@@ -1032,7 +1032,7 @@ void shipUpdateAnimPhase()
                     shipUpdateHitAnim();
                     if( !shipPopupBlocker )
                     {
-                        shipSfx( 1 );
+                        shipSfx( 1, 0 );
                         gbPopup( "HIT!!!", 10 );
                         shipPopupBlocker = true;
                     }
@@ -1097,7 +1097,7 @@ void shipUpdateShoot()
         }
         else
         {
-            shipSfx( 0 ); // launch sound - upstream's own commented-out gb.sound.playTick() right after this stays uncalled, matching real shipped behavior
+            shipSfx( 0, 0 ); // launch sound - upstream's own commented-out gb.sound.playTick() right after this stays uncalled, matching real shipped behavior
             shipNbShots[ shipP ] = shipNbShots[ shipP ] + 1;
             int target = shipCheckPos( 1 - shipP, shipCurX, shipCurY );
             if( target < 255 ) shipShots[ shipP ][ shipCurX ][ shipCurY ] = target;

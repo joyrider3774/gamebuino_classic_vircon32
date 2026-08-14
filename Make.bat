@@ -46,7 +46,7 @@ png2vircon assets\thumbnails4.png -o obj\thumbnails4.vtex || goto :failed
 echo.
 echo Convert the PlayNote wavetable
 echo --------------------------
-wav2vircon libs\PlayNote\sounds\wt_saw.wav -o obj\wt_saw.vsnd || goto :failed
+wav2vircon libs\PlayNote\sounds\wt_square.wav -o obj\wt_square.vsnd || goto :failed
 
 echo.
 echo Pack the ROM

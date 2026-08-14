@@ -65,18 +65,17 @@
 //
 // ---- Sound ----
 // `playsoundfx(fxno, channel)` upstream builds a small "FX Synth" preset
-// each call via several `gb.sound.command(...)` calls (waveform, volume
-// slide, pitch slide) before `gb.sound.playNote(pitch, duration,
-// channel)` - this shim only has a flat `gbPlayNote(pitch, duration)` (see
-// gamebuinoShim.h's own header comment: the effects/tracker part of real
-// Sound.h is out of scope for this project's first pass). This is the
-// exact same simplification already established for this project's own
-// gameSimonbuino.c (same 8-column "FX Synth" table shape, most likely the
-// same author's own reusable pattern) - `asterSoundFx[10][8]` is kept as
-// a verbatim copy of upstream's own `soundfx[10][8]` table for fidelity,
-// but `asterPlaySoundFx(fx)` only ever reads column 1 (pitch) and column 7
-// (duration); every `command()` call and the `channel` argument (this
-// shim has no per-channel addressing) are dropped.
+// each call via `gb.sound.command(...)` (waveform/instrument, volume
+// slide, pitch/arpeggio slide) before `gb.sound.playNote(pitch, duration,
+// channel)` - `asterPlaySoundFx(fx, channel)` is a real, faithful port of
+// this using this shim's own `gbSoundCommand()`/`gbPlayNoteChannel()`
+// primitives (a direct port of real Sound.h's own per-channel tracker
+// commands - see gamebuinoShim.h's own Sound section). `asterSoundFx[10][8]`
+// is a verbatim copy of upstream's own `soundfx[10][8]` table (all 10 rows/
+// 8 columns checked against the real `sounds.ino` byte-for-byte), and every
+// one of upstream's 11 real `playsoundfx(fx, channel)` call sites now
+// passes the same real channel number upstream itself uses at that exact
+// site.
 //
 // ---- The blocking gb.titleScreen() calls -> ASTER_STATE_SPLASH ----
 // Upstream calls the real, blocking `gb.titleScreen(text, gamelogo)` at
@@ -403,8 +402,7 @@ int[2][7] asterUfoFrames =
 
 int[5] asterBulletBitmap = { 3, 3, 0x40, 0xe0, 0x40 };
 
-// Real "FX Synth" preset table (sounds.ino), copied verbatim - only
-// column 1 (pitch) and column 7 (duration) are actually read - see header.
+// Real "FX Synth" preset table (sounds.ino), copied verbatim - see header.
 int[10][8] asterSoundFx =
 {
     { 0, 36, 57, 1, 1, 1, 5, 6 },   // 0 = shoot - channel 0
@@ -429,9 +427,13 @@ int asterB( bool cond )
     return 0;
 }
 
-void asterPlaySoundFx( int fx )
+void asterPlaySoundFx( int fx, int channel )
 {
-    gbPlayNote( asterSoundFx[ fx ][ 1 ], asterSoundFx[ fx ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, asterSoundFx[ fx ][ 6 ], 0, channel );
+    gbSoundCommand( GB_CMD_INSTRUMENT, asterSoundFx[ fx ][ 0 ], 0, channel );
+    gbSoundCommand( GB_CMD_SLIDE, asterSoundFx[ fx ][ 5 ], -asterSoundFx[ fx ][ 4 ], channel );
+    gbSoundCommand( GB_CMD_ARPEGGIO, asterSoundFx[ fx ][ 3 ], asterSoundFx[ fx ][ 2 ] - 58, channel );
+    gbPlayNoteChannel( asterSoundFx[ fx ][ 1 ], asterSoundFx[ fx ][ 7 ], channel );
 }
 
 // -----------------------------------------------------------------------
@@ -531,7 +533,7 @@ void asterNextLevelCheck()
 void asterHandleDeath()
 {
     asterDeadTimer = asterDeadTimer - 1;
-    if( asterDeadTimer % 5 == 0 ) asterPlaySoundFx( 1 );
+    if( asterDeadTimer % 5 == 0 ) asterPlaySoundFx( 1, 0 );
 
     int i = 19 - asterDeadTimer / 10;
     gbDrawBitmap( asterPlayerShipX / 8, asterPlayerShipY / 8, asterShipFrames[ i ] );
@@ -562,7 +564,7 @@ void asterHandlePlayerShip()
 
             if( gbRepeat( BTN_B, 0 ) ) // thrust
             {
-                asterPlaySoundFx( 8 );
+                asterPlaySoundFx( 8, 0 );
                 asterPlayerShipXSpeed = asterPlayerShipXSpeed + asterXAdd[ asterPlayerShipRotation ] / 8;
                 asterPlayerShipYSpeed = asterPlayerShipYSpeed + asterYAdd[ asterPlayerShipRotation ] / 8;
                 if( asterPlayerShipXSpeed > 8 ) asterPlayerShipXSpeed = 8;
@@ -595,7 +597,7 @@ void asterHandlePlayerShip()
                 asterPlayerShotY[ asterPlayerShots ] = asterPlayerShipY + 16 + asterPlayerShotYSpeed[ asterPlayerShots ];
                 asterPlayerShotCounter[ asterPlayerShots ] = 0;
                 asterPlayerShots = asterPlayerShots + 1;
-                asterPlaySoundFx( 0 );
+                asterPlaySoundFx( 0, 0 );
             }
         }
         else // death
@@ -702,7 +704,7 @@ void asterHandleRocks()
         if( destroyed == 1 )
         {
             asterSoundSpeed = asterSoundSpeed - 2 * asterB( asterSoundSpeed > 5 );
-            asterPlaySoundFx( 1 + asterB( asterRockType[ i ] > 3 ) + asterB( asterRockType[ i ] > 7 ) );
+            asterPlaySoundFx( 1 + asterB( asterRockType[ i ] > 3 ) + asterB( asterRockType[ i ] > 7 ), 2 );
             asterScore = asterScore + 20 + 30 * asterB( asterRockType[ i ] > 3 ) + 50 * asterB( asterRockType[ i ] > 7 );
 
             if( asterRockType[ i ] < 8 ) // big or medium rock -> split
@@ -777,7 +779,7 @@ void asterMoveUfo()
     {
         asterUfoX = asterUfoX + asterUfoXr;
         asterUfoY = asterUfoY + asterUfoYr;
-        if( asterUfoX % 5 == 0 ) asterPlaySoundFx( 4 );
+        if( asterUfoX % 5 == 0 ) asterPlaySoundFx( 4, 3 );
         if( asterUfoY < -40 ) asterUfoY = 384;
         if( asterUfoY > 384 ) asterUfoY = -40;
         if( arand( 50 ) < 2 ) asterUfoYr = ( arand( 3 ) - 1 ) * 3; // change direction
@@ -793,7 +795,7 @@ void asterMoveUfo()
         {
             asterUfoType = 0;
             asterDeadTimer = 40;
-            asterPlaySoundFx( 1 );
+            asterPlaySoundFx( 1, 2 );
         }
     }
 }
@@ -805,7 +807,7 @@ void asterPlayerShotUfoCollision()
     {
         if( ( asterPlayerShotX[ u ] < asterUfoX + 32 + 16 * asterB( asterUfoType == 1 ) ) && ( asterPlayerShotX[ u ] + 16 > asterUfoX ) && ( asterPlayerShotY[ u ] < asterUfoY + 16 + 16 * asterB( asterUfoType == 1 ) ) && ( asterPlayerShotY[ u ] + 16 > asterUfoY ) && asterPlayerShotCounter[ u ] < 50 && asterUfoType != 0 )
         {
-            asterPlaySoundFx( 3 );
+            asterPlaySoundFx( 3, 0 );
             asterScore = asterScore + 200 + 800 * asterB( asterUfoType == 2 );
             asterUfoType = 0;
             asterPlayerShotCounter[ u ] = 50;
@@ -818,7 +820,7 @@ void asterUfoShotRelease()
 {
     if( asterUfoType != 0 && asterUfoShotX == -1 && asterUfoX > 40 && asterUfoX < 608 )
     {
-        asterPlaySoundFx( 9 );
+        asterPlaySoundFx( 9, 0 );
         asterUfoShotX = asterUfoX + 24;
         asterUfoShotY = asterUfoY + 16;
         asterUfoShotXr = ( arand( 3 ) - 1 ) * 8;
@@ -847,7 +849,7 @@ void asterMoveUfoShot()
         {
             asterUfoShotX = -1;
             asterDeadTimer = 40;
-            asterPlaySoundFx( 1 );
+            asterPlaySoundFx( 1, 2 );
         }
     }
 }
@@ -856,7 +858,7 @@ void asterCheckBonusLife()
 {
     if( asterScore >= asterBonusScore )
     {
-        asterPlaySoundFx( 5 );
+        asterPlaySoundFx( 5, 3 );
         asterLives = asterLives + 1;
         asterBonusScore = asterBonusScore + 10000;
     }
@@ -869,7 +871,7 @@ void asterBackgroundSound()
     {
         asterSoundCounter = 0;
         asterSoundValue = ( asterSoundValue + 1 ) % 2;
-        asterPlaySoundFx( asterSoundValue + 6 );
+        asterPlaySoundFx( asterSoundValue + 6, 1 );
     }
 }
 
