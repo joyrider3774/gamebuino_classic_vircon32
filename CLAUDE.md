@@ -4259,6 +4259,31 @@ but a strictly worse one with no reason to deliberately reproduce it here
 - left as an accidental improvement, not treated as a divergence needing
 a fix.
 
+## Lights Out AD's "You won!" timer fixed - another mistaken "matches real hardware" claim caught by a live report
+
+Prompted by a live report ("on the 'you won' screen the time keeps
+increasing instead of remaining static like on real hardware"). This
+file's own header comment already claimed the opposite - that the
+displayed time is recomputed every tick "matching upstream's own real
+`gb.frameCount - startT` call sitting directly inside the loop" - a claim
+that, like a handful of others found this session, turned out to be wrong
+on direct re-verification, not just re-trusted. Real upstream's own
+`won()` computes `int time = gb.frameCount - startT;` exactly once, as
+its own very first statement, **before** its own blocking `while(1)`
+display loop even begins - not inside that loop at all. Real hardware
+therefore shows a genuine static snapshot of the finish time; this port's
+own per-tick state-machine architecture calls `loutUpdateWon()` every
+single frame, and the earlier, mistaken port recomputed `gbFrameCount -
+loutStartT` fresh on every one of those calls, making the displayed time
+visibly climb for as long as the player lingered reading the win screen.
+
+Fixed by adding a real snapshot variable, `loutWonTime`, computed once in
+`loutBeginWon()` (the exact point in this port's own state machine that
+corresponds to real `won()`'s own function entry, right after the win
+condition is confirmed and right where real upstream's own `time =
+gb.frameCount - startT` line sits) - `loutUpdateWon()` now prints that
+cached value every tick instead of recomputing it.
+
 ## Open questions
 
 - **Sound**: only one-shot representative tones are implemented

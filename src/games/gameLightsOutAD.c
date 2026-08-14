@@ -217,6 +217,7 @@ int loutHOff;
 int loutVOff;
 int loutStartT;
 int loutToggles;
+int loutWonTime;
 
 // Intro-reveal state - upstream's own real `introBoard()` locals.
 int[LOUT_BOARD_MAX] loutIntroBoard;
@@ -377,22 +378,29 @@ bool loutCheckWon()
 
 // Upstream's own real won() plays gb.sound.playOK() once immediately on
 // entry, before its own blocking display loop even starts - reproduced
-// here as the transition into LOUT_APP_WON.
+// here as the transition into LOUT_APP_WON. Real upstream also computes
+// `time = gb.frameCount - startT` here, once, before that loop begins -
+// not inside it - so the displayed time is a real snapshot, not a running
+// clock. `loutWonTime` captures that same snapshot at the same point.
 void loutBeginWon()
 {
     loutAppState = LOUT_APP_WON;
+    loutWonTime = gbFrameCount - loutStartT;
     loutPlayOK();
 }
 
-// Direct port of upstream's own real won() display loop. `time` is
-// recomputed fresh every tick (not cached at entry), matching upstream's
-// own real `gb.frameCount - startT` call sitting directly inside the
-// loop - the displayed time keeps counting up for as long as the player
-// lingers on this screen reading it, a genuine (harmless) upstream quirk,
-// preserved as-is.
+// FIXED, NOT PRESERVED - see this file's own header comment: real
+// upstream's own `time = gb.frameCount - startT` sits once, before its
+// blocking display loop begins, not inside it - a real static snapshot,
+// not a running clock. An earlier pass here recomputed it fresh every
+// tick instead (since this port's own per-tick state-machine architecture
+// calls this function every frame), making the displayed time keep
+// counting up for as long as the player lingered on this screen - a real,
+// live-reported divergence from real hardware, not a preserved quirk.
+// Fixed by printing the snapshot `loutBeginWon()` already took.
 void loutUpdateWon()
 {
-    int time = gbFrameCount - loutStartT;
+    int time = loutWonTime;
 
     gbCursorX = 6;
     gbCursorY = 5;

@@ -142,6 +142,10 @@ too, marked "FIXED, NOT PRESERVED".
   had a hardcoded address-0 typo instead of using its own loop variable,
   so the high score could never actually persist across a save/reload.
   Fixed to write the correct address.
+- **Lights Out AD** (`gameLightsOutAD.c`): The "You won!" screen's time
+  readout was recomputed every frame instead of once on entry, so it kept
+  counting up for as long as the player lingered on the screen instead of
+  showing the real, static finish time. Fixed to snapshot the time once.
 - **Maruino** (`gameMaruino.c`): The "enter a code" screen's own on-screen
   text said Button C returns to the menu, but only Button A was actually
   checked - C did nothing there. Fixed so C genuinely returns to the menu.
