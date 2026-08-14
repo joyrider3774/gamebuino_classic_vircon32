@@ -4284,6 +4284,38 @@ condition is confirmed and right where real upstream's own `time =
 gb.frameCount - startT` line sits) - `loutUpdateWon()` now prints that
 cached value every tick instead of recomputing it.
 
+## A real D-pad input-bleed bug found in the menu's own quit-to-menu transition
+
+Prompted by a direct question ("can button state be cleared so left over
+inputs won't affect the menu position from the current game we quited").
+Checked rather than assumed, and found a genuine gap: `menu_init()` (called
+right after confirming Quit in the dialog, per `portVircon32.c`'s own
+`currentGameIndex = -1; menu_init();`) used to unconditionally reset
+`prevUp`/`prevDown`/`prevLeft`/`prevRight` to `false`, with no regard for
+whatever the D-pad's own real physical state already was at that exact
+moment. Button A itself was already safe on this exact path -
+`md_armInputAGate()` (armed by `portVircon32.c` immediately before
+`menu_init()` runs) makes `md_inputA()` itself report "released" until the
+real button genuinely is, so `menu.c`'s own `a = md_inputA()` read already
+couldn't see a leftover press - but no equivalent gate exists anywhere for
+Up/Down/Left/Right. A player still holding, say, Right (moving their
+character) at the exact moment they confirmed Quit would have `prevRight`
+forced to `false` while the real button stayed `true` - manufacturing a
+false "just pressed" edge on the very next `menu_update()` tick and
+instantly paging the just-reopened menu sideways, with no new input from
+the player at all.
+
+Fixed by having `menu_init()` sample each button's own real current state
+(`md_inputUp()`/`Down()`/`Left()`/`Right()`) instead of assuming released -
+the exact same "arm against whatever's already held" idea
+`portVircon32.c` already uses for `prevConfirmLeft`/`Right`/`A` right
+before opening the quit dialog itself, just applied to the menu's own
+return path too. `menu_init()`'s other call site (cartridge boot, before
+any game has ever run) is unaffected in practice - a player could
+technically be holding a direction at the exact moment the ROM finishes
+loading, but that's a far narrower window than the every-single-quit case
+this was actually found for.
+
 ## Open questions
 
 - **Sound**: only one-shot representative tones are implemented

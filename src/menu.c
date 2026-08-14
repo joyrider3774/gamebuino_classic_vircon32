@@ -94,13 +94,30 @@ void menu_buildDisplayOrder()
     displayOrderBuilt = true;
 }
 
+// Real, live gap found via a direct question: menu_init() used to reset
+// every prevX unconditionally to false, regardless of whatever the D-pad's
+// own real physical state already was at that exact moment. Button A is
+// already safe on the same "return from a just-quit game" path -
+// md_armInputAGate() (armed by portVircon32.c right before this function
+// runs) makes md_inputA() itself report "released" until the physical
+// button genuinely is, so menu.c's own `a = md_inputA()` read below
+// already can't see a leftover press. But Up/Down/Left/Right have no
+// equivalent gate anywhere - so a player who was still holding, say,
+// Right (moving their character) at the exact moment they confirmed Quit
+// would have had prevRight forced to false here while the real button was
+// still true, manufacturing a false "just pressed" edge on the very next
+// tick and instantly paging the just-reopened menu sideways with no real
+// new input from the player. Fixed by sampling each button's own real
+// current state instead of assuming released - the same "arm against
+// whatever's already held" idea portVircon32.c already uses for
+// prevConfirmLeft/Right/A before opening the quit dialog itself.
 void menu_init()
 {
-    prevUp = false;
-    prevDown = false;
-    prevA = false;
-    prevLeft = false;
-    prevRight = false;
+    prevUp = md_inputUp();
+    prevDown = md_inputDown();
+    prevA = md_inputA();
+    prevLeft = md_inputLeft();
+    prevRight = md_inputRight();
 
     if( !displayOrderBuilt )
       menu_buildDisplayOrder();
