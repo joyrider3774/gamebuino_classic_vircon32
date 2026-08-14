@@ -4219,6 +4219,46 @@ special-casing needed). `gameUfoRace.c` itself was deliberately left
 exactly as it already was - its own fresh-cell behavior is genuinely
 correct as shipped, needing no change.
 
+## Gruniozerca's fresh-EEPROM 255 top score fixed - a real display quirk that, unusually, genuinely does match real hardware
+
+Prompted by a live report ("on a fresh memory card gruniozerca highscore
+is set to 255 or other invalid value it probably needs the eeprom stuff
+like other games"). Unlike the CrazyTown/UfoRace cases above, tracing this
+one found no narrow-int divergence at all: real upstream's own `topscore`
+is declared a plain `int` (`int topscore = EEPROM.read(0);`), and a single
+fresh EEPROM byte (255) fits an `int` without any overflow/narrowing
+regardless of platform - real hardware genuinely shows "255" on a brand
+new save too, exactly matching what this port already did. The existing
+header comment's own "matches real hardware, preserved deliberately"
+claim held up under re-verification, unlike CrazyTown's identical-sounding
+claim which turned out to only be true for the gameplay comparison, not
+the display.
+
+Fixed anyway, per the same direct override precedent CrazyTown just set -
+a fresh save showing an already-maxed-out score looks broken to a player
+regardless of real-hardware fidelity. `gameGruniozerca_init()` now resets
+a freshly-read 255 to 0. Documented, not silently accepted, a real
+trade-off unique to this game's own data layout: unlike a 16-bit sentinel
+(65535) that's comfortably outside any plausible real score, 255 is
+*both* the fresh-EEPROM sentinel and the literal maximum of upstream's own
+single-byte-range design, so a genuinely-earned top score of exactly 255
+would also read back as 255 and get incorrectly reset - accepted as a
+real but vanishingly unlikely edge case (requires exactly 255, not 256+,
+not 254-) rather than solved properly with a second EEPROM byte as a
+"has been played" flag, which felt like over-engineering for a single-life
+casual score.
+
+A second, genuine one-directional divergence was found and deliberately
+NOT reproduced while investigating this: this shim's own `eeprom_write_byte()`
+stores a full, unmasked `int` (`currentSlot.data[]` is `int[]`, no `&
+0xFF` anywhere), while real `EEPROM.write(uint8_t)` truncates to a single
+byte - so a real player who legitimately scores above 255 has their save
+silently wrap/corrupt on real hardware (e.g. 300 truncates to 44), while
+this port persists the true, correct value. A real upstream limitation,
+but a strictly worse one with no reason to deliberately reproduce it here
+- left as an accidental improvement, not treated as a divergence needing
+a fix.
+
 ## Open questions
 
 - **Sound**: only one-shot representative tones are implemented

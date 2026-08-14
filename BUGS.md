@@ -135,6 +135,9 @@ too, marked "FIXED, NOT PRESERVED".
   same press within one tick, skipping the Game Over screen (final score/
   highscore) entirely. Fixed by making the transition a genuine deferred
   state change instead of a same-tick synchronous call.
+- **Gruniozerca** (`gameGruniozerca.c`): A fresh EEPROM cell composed to
+  255, showing an already-maxed-out top score on a save that had never
+  actually been played. Fixed with a fresh-cell sentinel check.
 - **Jezzball** (`gameJezzball.c`): The EEPROM "reset magic bytes" routine
   had a hardcoded address-0 typo instead of using its own loop variable,
   so the high score could never actually persist across a save/reload.

@@ -118,11 +118,23 @@
 // see this project's own CLAUDE.md "porting priority audit"): real,
 // working high-score persistence, not just an exercised fallback path.
 // Fresh/never-written EEPROM cells read back as 255 (this shim's own
-// documented real-AVR-accurate default) - exactly matching real hardware's
-// own behaviour here too: a brand new save slot's topscore starts at 255,
-// already higher than any score reachable in a normal early session, a
-// genuine upstream quirk preserved rather than "fixed" with an artificial
-// zero default. `EEPROM.write(0, topscore)` became `eeprom_write_byte(0,
+// documented real-AVR-accurate default), exactly matching real hardware's
+// own behaviour too (`topscore` is a real `int`, and 255 fits it without
+// any narrowing, unlike the multi-byte-composition sentinel bugs found
+// elsewhere in this project - see gameCrazyTown.c's own header comment) -
+// but a fresh save slot showing an already-maxed-out topscore looks broken
+// to a player regardless of how faithfully it matches real hardware, so
+// `gameGruniozerca_init()` treats a freshly-read 255 as "no score yet" and
+// resets it to 0. This narrows, rather than eliminates, the real ambiguity
+// upstream's own single-byte-range design already has - a genuinely-earned
+// topscore of exactly 255 would also read back as 255 and get reset the
+// same way - accepted as a real but vanishingly unlikely edge case (this
+// port's own `eeprom_write_byte()` stores a full, unmasked int rather than
+// truncating to a real byte the way `EEPROM.write(uint8_t)` does, so a
+// genuine score above 255 persists correctly here rather than wrapping the
+// way it would on real hardware - a real, one-directional improvement over
+// upstream's own byte-truncation limit, not reproduced deliberately).
+// `EEPROM.write(0, topscore)` became `eeprom_write_byte(0,
 // gruniTopScore)`, called only when `score > topscore`. The Game Over
 // screen's own upstream `if(score == topscore)` "!NEW HIGH SCORE!" check
 // (not a separate `rekord` flag - upstream computes one but never actually
@@ -677,6 +689,7 @@ void gameGruniozerca_init()
     // file's own header comment) so this always reads the slot
     // eepromSelectGame() already picked for this game.
     gruniTopScore = eeprom_read_byte( 0 );
+    if( gruniTopScore == 255 ) gruniTopScore = 0;
 
     int i;
     for( i = 0; i < 8; i++ )
