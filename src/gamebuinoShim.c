@@ -1983,11 +1983,25 @@ void gbInitSoundEngine()
     int i;
     for( i = 0; i < MAX_SOUND_CHANNELS; i++ )
     {
+        // A real, previously-live bug: this used to overwrite
+        // gbActiveVoice[i] with -1 directly, without ever telling the
+        // backend to actually stop whatever voice was still sounding
+        // there - harmless on a port with a large shared voice pool (a
+        // leaked voice is just one wasted slot among many), but a real,
+        // audible "stuck on the same tone forever" bug on a port with a
+        // small DEDICATED tracker pool sized to exactly MAX_SOUND_CHANNELS
+        // (confirmed live on the sibling gamebuino_classic_sdl project's
+        // own Playdate port, whose 4-slot pool leaves zero slack for even
+        // one leaked voice before the next 4-simultaneous-channel moment
+        // steals it out from under its real owner). gbStopNoteChannel()
+        // already does this correctly (guards on gbActiveVoice[i]>=0
+        // before calling md_trackerVoiceStop()) - call it instead of
+        // hand-rolling the same reset without the stop.
+        gbStopNoteChannel( i );
+
         gbTrackIsPlaying[ i ] = false;
         gbPatternIsPlaying[ i ] = false;
         gbPatternLooping[ i ] = false;
-        gbNotePlaying[ i ] = false;
-        gbActiveVoice[ i ] = -1;
         gbVolumeSlideStepDuration[ i ] = 0;
         gbArpeggioStepDuration[ i ] = 0;
         gbTremoloStepDuration[ i ] = 0;
