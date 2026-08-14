@@ -333,6 +333,11 @@ Snake is its own special case - see above, not this list.)
     the wrong fields as coordinates.
   - The death check is never called during boss fights - health can go
     arbitrarily negative with no consequence.
+  - No real Game Over state exists at all - losing a life just resets the
+    current level, with lives never checked for reaching 0. Only 2 of the
+    5 worlds have a genuinely unique layout (the other 3 all reuse the
+    same map data). Marked unfinished in the cartridge's own menu (red
+    list text, info "No Game Over / only 2 levels").
 - **SavePrincesse** (`gameSavePrincesse.c`): Hit/attack collision always
   uses the wider "attacking pose" hitbox regardless of the pose actually
   drawn.

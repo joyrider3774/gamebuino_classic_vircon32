@@ -112,7 +112,7 @@ void addGames()
     // Unfinished game - reddish list text: the ball can get stuck (see
     // comment near SAVE PRINCESSE above for the markUnfinished() mechanism).
     markUnfinished( addGame( "PINBALL", "CLEMENT83", "Ball can get stuck", &gamePinball_init, &gamePinball_update, NULL ) );
-    addGame( "ROBOT", "FRAKASSS", NULL, &gameRobot_init, &gameRobot_update, NULL );
+    markUnfinished( addGame( "ROBOT", "FRAKASSS", "No Game Over / only 2 levels", &gameRobot_init, &gameRobot_update, NULL ) );
     addGame( "ELVENTURE", "TRODOSS", NULL, &gameElventure_init, &gameElventure_update, NULL );
     // The porter credit ("WUUFF") is a second, independent info line
     // rather than embedded in the author string via '\n' - see menu.c's
