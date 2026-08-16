@@ -124,6 +124,7 @@
 #include "games/gameFifteen.c"
 #include "games/gameMoleControl.c"
 #include "games/gameAerialAssault.c"
+#include "games/gameSoundTest.c"
 
 #include "menuGameList.c"
 

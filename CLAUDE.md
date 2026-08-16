@@ -4589,6 +4589,58 @@ turned out to require exactly this kind of independent verification
 live recorded-audio comparison) that wasn't obviously available to hand
 until directly asked.
 
+## A real SoundTest diagnostic tool added, which immediately surfaced a real, pre-existing playOK()/playCancel() bug: two simultaneous tones instead of a real sequenced pattern
+
+Prompted by "can you make me an ino to test the default sounds and other
+sounds" - a real Arduino sketch (`more games/SoundTest/SoundTest.ino`,
+built on the real `<Gamebuino.h>` library directly, not this project's own
+shim) exercising `playOK()`/`playCancel()`/`playTick()` plus a raw
+`playNote()` sweep across the real 0-35 pitch range, for flashing to real
+hardware/Simbuino to record fresh reference audio. Immediately followed by
+"port soundtest as a game and add it to the menu" - ported as a genuine
+14th-registered-in-this-batch, in-cartridge diagnostic tool
+(`src/games/gameSoundTest.c`, `markUnfinished()`-flagged with
+`"Diagnostic tool, not a game"` as its own `info` line, since it's not a
+real upstream game at all) offering the identical test list via UP/DOWN
+select + A play, so the same tones can be replayed from directly inside
+the port with no separate hardware/build needed.
+
+**Using it immediately surfaced a real, live, previously-undetected bug**:
+"playok and playcancel sound the same in our port." Traced directly against
+real `Sound.cpp`: `Sound::playOK()`/`playCancel()` both call
+`playPattern(...,0)` on a real, genuine 2-note SEQUENCE (`playOKPattern
+= {0x0005,0x138,0x168,0x0000}` decodes to select-instrument-0 then
+NOTE(pitch=14,dur=1) then NOTE(pitch=26,dur=1); `playCancelPattern` is the
+identical two notes in reverse order) - the two sounds are only audibly
+different from each other *because* they're sequenced in time (rising vs
+falling). This shim's own `gbPlayOK()`/`gbPlayCancel()` had instead always
+called `md_playTone()` **twice, back-to-back with no delay between the two
+calls**, at the two correct frequencies but with no timing offset at all -
+producing two *simultaneous* tones (a chord) rather than a sequence. Since
+a two-note chord sounds identical regardless of which order the two
+`md_playTone()` calls happen to run in, `gbPlayOK()` and `gbPlayCancel()`
+had been genuinely, audibly indistinguishable from each other since the
+very session this pair was first implemented - a real bug hiding behind an
+earlier investigation's own mistaken "do sounds get collapsed" conclusion
+(see "A full real tracker/pattern/track engine..." above), which had
+checked only whether the two `md_playTone()` calls landed on separate
+channels and sounded together at all, not whether "together" should have
+meant "simultaneously" in the first place.
+
+**Fixed by switching both (and `gbPlayTick()`, for consistency) to the
+already-existing, already-proven `gbPlayPattern()` tracker engine**,
+reproducing the real pattern arrays verbatim
+(`gbPlayOKPattern`/`gbPlayCancelPattern`/`gbPlayTickPattern`, decoded by
+hand against the real bit layout `gbSoundCommand()`/
+`gbUpdatePatternChannel()` already implement) instead of the ad-hoc
+two-direct-tone-call hack that predated the tracker engine's own
+existence in this codebase - `gbPlayPattern()` already resets volume/
+slide/arpeggio/tremolo state and stops whatever was previously playing on
+the target channel, so no extra setup was needed. Applied identically in
+the sibling `gamebuino_classic_sdl` project's own copy of the same shared
+engine code (all three of its SDL2/SDL3/Playdate builds rebuilt clean
+afterward).
+
 ## Open questions
 
 - **Sound**: fully resolved - no longer an open question. Real square-wave

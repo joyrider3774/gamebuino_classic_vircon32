@@ -146,4 +146,10 @@ void addGames()
     // The repo is named "Strike-Down", but its own README titles the game
     // "Aerial-Assault" - registered under that real title, not the repo name.
     addGame( "AERIAL-ASSAULT", "SKYLARHYLAR", NULL, &gameAerialAssault_init, &gameAerialAssault_update, NULL );
+    // Not a ported upstream game - a real, in-cartridge Sound-primitive
+    // diagnostic tool (see gameSoundTest.c's own header comment). Marked
+    // unfinished purely to visually flag it as a different kind of entry
+    // from every other, real game in this list, not because it's an
+    // incomplete game.
+    markUnfinished( addGame( "SOUND TEST", "WILLEMS DAVY", "Diagnostic tool, not a game", &gameSoundTest_init, &gameSoundTest_update, NULL ) );
 }

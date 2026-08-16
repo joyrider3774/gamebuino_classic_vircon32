@@ -141,7 +141,7 @@
 #define THUMBNAILS4_TEXTURE_ID 6
 #define THUMBNAIL4_GRID_COLS 4
 #define THUMBNAIL4_GRID_ROWS 3
-#define THUMBNAIL_COUNT 99
+#define THUMBNAIL_COUNT 100
 
 // Same 256-tile-per-byte-value layout as COLUMNS_TEXTURE_ID above (see
 // tools/gen_column_atlas_gray.py), but "lit" bits are a real opaque
