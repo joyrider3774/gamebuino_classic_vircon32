@@ -4519,6 +4519,76 @@ fix, all 34 game migrations, and the Copter crash fix) was squashed into
 a single commit on `main`, with every agent worktree and branch deleted
 afterward - no per-agent branch history left referenced anywhere.
 
+## A real ISR-rate bug found via a live recorded-audio comparison against Simbuino: the "15000 times per second" comment was wrong by ~3.8x
+
+Prompted by the user recording ~108 seconds of real gameplay audio (101
+Starships' own background music, once through this project's own port,
+once through Simbuino - a real, independent, cycle-accurate AVR
+simulator, `github.com/Myndale/Simbuino`, temporarily cloned to
+investigate) and asking directly why the two sounded different.
+
+FFT analysis of the recording (`numpy`, a plain Hanning-windowed
+`rfft` over two ~15-second segments, one from each source) found two
+clean, simultaneous dominant-frequency clusters in both recordings - a
+real match on musical content (this project's own port and Simbuino
+agree on WHICH two notes 101Starships' own two background-music channels
+are playing at any given moment, and the ratio between those two notes
+matches to within 0.01% between the two recordings) - but every
+Simbuino frequency measured a consistent **~3.8x higher** than this
+project's own corresponding one.
+
+Root cause, confirmed independently two different ways rather than
+guessed at: this shim's real audible-frequency formula
+(`freqHz = 15000 / (2*halfPeriod)`) had trusted a real comment sitting
+directly in real `Sound.cpp` ("this function runs 15 000 times per
+second") as ground truth for `Sound::generateOutput()`'s own real
+Timer1-ISR rate, reasoned at the time as "the actual firmware author's
+own stated fact... more reliable than my own uncertain re-derivation
+from register values with an assumed F_CPU." That reasoning turned out
+to be backwards - the comment itself was the wrong figure, not the
+derivation:
+- **Simbuino's own source** (`AtmelProcessor.cs`) hardcodes
+  `public const int ClockSpeed = 16000000` - a real, independently-
+  authored, cycle-accurate simulation's own confirmed real Gamebuino
+  Classic CPU clock (16MHz), not something this project had verified
+  directly before.
+- Combined with real `Sound::begin()`'s own already-read timer setup
+  (`OCR1A=280`, CTC mode via `WGM12`, prescaler 1 via `CS10`), the real
+  ISR period is `OCR1A+1=281` clock cycles, giving a real rate of
+  `16000000/281 = 56939.5 Hz` - **not** 15000.
+- `56939.5/15000 = 3.796`, matching the measured ~3.8x audio ratio to
+  within 0.08% - a decisive, independent confirmation from a completely
+  different real source (recorded audio) than the one that exposed the
+  register-derived value in the first place (Simbuino's own source).
+
+Fixed by replacing the hardcoded `15000.0` throughout the tracker
+engine's own frequency formula with a new, properly-derived
+`GB_SOUND_ISR_HZ` constant (`16000000.0/281.0`), and recomputing
+`gbPlayTick()`/`gbPlayOK()`/`gbPlayCancel()`'s own real derived
+frequencies (68.18Hz/136.36Hz -> 258.82Hz/517.63Hz - the same real
+`_halfPeriods` table indices and octave relationship as before, just at
+the real, corrected absolute pitch). This is a single, centralized fix
+(one constant, one formula, in `gbUpdateNoteChannel()`) that corrects
+every one of the 34 already-migrated games' own real tracker/pattern
+music and sound effects at once, with no per-game changes needed -
+ported identically to the sibling `gamebuino_classic_sdl` project's own
+copy of the same shared engine code.
+
+**A related discipline lesson, worth keeping in mind for any future
+similar situation**: the original "trust the real source's own comment
+over my own re-derivation" reasoning was a real, considered judgment
+call at the time, not a careless assumption - but it turned out to be
+exactly backwards, because a source comment is still just prose written
+by a human, with no compiler checking it against the actual code the
+way the register values themselves are enforced. The register-derived
+value was always the more authoritative one; it should have been
+computed and cross-checked rather than deferred to the comment
+"deferred to be extra literal-source-faithful," even though checking it
+turned out to require exactly this kind of independent verification
+(a second real source - Simbuino's own hardcoded clock constant - or a
+live recorded-audio comparison) that wasn't obviously available to hand
+until directly asked.
+
 ## Open questions
 
 - **Sound**: fully resolved - no longer an open question. Real square-wave
