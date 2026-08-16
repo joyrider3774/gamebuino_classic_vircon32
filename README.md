@@ -95,10 +95,16 @@ diverges from standard C/C++ in a few consistent ways:
   smaller set, fixed on direct request) were judged a genuine negative hit
   to player experience. See [BUGS.md](BUGS.md) for the full list of what's
   deliberately preserved vs. what was fixed and why.
-- **Sound is approximated with one-shot tones** (no pattern/track player
-  exists in this shim yet), and each game gets its own short, unique
-  global/function name prefix to keep 99 games' worth of C code collision-
-  free in one shared build.
+- **Sound is a real port of the actual tracker/pattern/track engine**
+  (notes, patterns, tracks, and instrument envelopes/slide/arpeggio/
+  tremolo commands), not just one-shot tones - with one real, documented
+  gap: **there is no noise instrument.** Real hardware drives its speaker
+  from a genuine pseudorandom noise generator for any instrument step
+  flagged as noise (e.g. `playTick()`); this port has no noise waveform at
+  all, so a noise-flagged step plays as a plain tone at the same pitch/
+  duration instead. Each game also gets its own short, unique global/
+  function name prefix to keep 99 games' worth of C code collision-free in
+  one shared build.
 
 ## Games
 
@@ -110,6 +116,12 @@ titles are shown in **red text** instead of white - a plain visual
 built from a genuinely incomplete upstream source, or a known bug like a
 ball that can get stuck). They're still fully selectable and playable
 like any other game, just flagged.
+
+The table also includes **Sound Test**, which uses the same red-text
+flagging but for a different reason: it's not a ported game at all, just
+an in-cartridge diagnostic tool for exercising the sound shim's own
+primitives directly (`playOK()`/`playCancel()`/`playTick()`, a raw pitch
+sweep, and a few instrument/volume/slide extras).
 
 | Game | Author | License | Save | Source | Screenshot |
 |---|---|---|---|---|---|
@@ -194,6 +206,7 @@ like any other game, just flagged.
 | Snake Classic | Ripper121 (original), Tnxec2 (fork) | None | — | [snake gamebuino classic](https://github.com/Tnxec2/snake-gamebuino-classic) | [<img src="metadata/screenshots/SNAKE CLASSIC.png" width="80">](metadata/screenshots/SNAKE%20CLASSIC.png) |
 | Sokobuino | martinsustek | None | ✅ | Recovered via direct download (no stable link) | [<img src="metadata/screenshots/SOKOBUINO.png" width="80">](metadata/screenshots/SOKOBUINO.png) |
 | Solitaire | Andy O'Neill | MIT | ✅ | [gamebuino solitaire](https://github.com/aoneill01/gamebuino-solitaire) | [<img src="metadata/screenshots/SOLITAIRE.png" width="80">](metadata/screenshots/SOLITAIRE.png) |
+| Sound Test | willems davy | GPLv3 (this project's own code) | — | Not a ported game - a sound-shim diagnostic tool, see above | [<img src="metadata/screenshots/SOUND TEST.png" width="80">](<metadata/screenshots/SOUND%20TEST.png>) |
 | Spin Spin Spinbuino! | Charly Piva "Zoglu" / Margot Piva "Isil" | None | ✅ | zoglu.net (no stable link) | [<img src="metadata/screenshots/SPIN SPIN SPINBUINO!.png" width="80">](<metadata/screenshots/SPIN%20SPIN%20SPINBUINO!.png>) |
 | Star Honor | Wenceslao Villanueva Jr (original) / wuuff (Gamebuino port) | MIT | — | [StarHonor](https://github.com/wuuff/StarHonor) | [<img src="metadata/screenshots/STAR HONOR.png" width="80">](<metadata/screenshots/STAR%20HONOR.png>) |
 | StickFighter | Clement83 (art by Quirby64) | None | — | [StickFighter](https://github.com/Clement83/StickFighter) | [<img src="metadata/screenshots/STICKFIGHTER.png" width="80">](metadata/screenshots/STICKFIGHTER.png) |
